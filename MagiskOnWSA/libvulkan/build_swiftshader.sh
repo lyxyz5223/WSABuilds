@@ -362,6 +362,24 @@ build_swiftshader() {
     mkdir -p "$build_dir"
     cd "$build_dir"
     
+    # 生成 commit.h（版本信息头文件，Android 构建需要此文件但 CMake 不会自动生成）
+    info "生成 commit.h..."
+    python3 "$SWIFTSHADER_SRC/src/commit_id.py" gen "$SWIFTSHADER_SRC/src/Vulkan/commit.h" 2>/dev/null || {
+        warn "commit_id.py 执行失败，创建默认版本..."
+        cat > "$SWIFTSHADER_SRC/src/Vulkan/commit.h" << 'COMMITEOF'
+#define SWIFTSHADER_COMMIT_HASH "wsa-build"
+#define SWIFTSHADER_COMMIT_HASH_SIZE 12
+#define SWIFTSHADER_COMMIT_DATE "2024-01-01 00:00:00 +0000"
+#define SWIFTSHADER_VERSION_STRING \
+    MACRO_STRINGIFY(MAJOR_VERSION) "."  \
+    MACRO_STRINGIFY(MINOR_VERSION) "."  \
+    MACRO_STRINGIFY(PATCH_VERSION) "."  \
+    SWIFTSHADER_COMMIT_HASH
+COMMITEOF
+        info "  默认 commit.h 已创建"
+    }
+    info "  commit.h 已就绪"
+
     info "开始配置 CMake (Android x86_64)..."
     cmake "$SWIFTSHADER_SRC" \
         -DCMAKE_TOOLCHAIN_FILE="$NDK_DIR/build/cmake/android.toolchain.cmake" \
