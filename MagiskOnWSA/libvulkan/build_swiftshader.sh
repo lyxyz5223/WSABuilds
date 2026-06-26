@@ -178,43 +178,50 @@ else:
 print('补丁全部应用成功!')
 " "$SWIFTSHADER_SRC"
 
-    # 下载缺失的 Android Vulkan 头文件 vk_android_native_buffer.h
-    # 这个头文件来自 AOSP frameworks/native，NDK 不包含它
-    local header_path="$SWIFTSHADER_SRC/include/vulkan/vk_android_native_buffer.h"
-    if [ ! -f "$header_path" ]; then
-        info "下载 vk_android_native_buffer.h (来自 AOSP)..."
-        mkdir -p "$SWIFTSHADER_SRC/include/vulkan"
-        # AOSP Gitiles 以 base64 格式返回原始内容
-        local aosp_url="https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/vulkan/include/vulkan/vk_android_native_buffer.h?format=TEXT"
+    # 下载缺失的 Android 平台头文件（AOSP，NDK 不包含）
+    download_aosp_header() {
+        local rel_path="$1"   # 例如 vulkan/vk_android_native_buffer.h
+        local aosp_url="$2"   # AOSP Gitiles URL (不含 ?format=TEXT)
+        local dest="$SWIFTSHADER_SRC/include/$rel_path"
+        mkdir -p "$(dirname "$dest")"
+        if [ -f "$dest" ]; then
+            info "  $rel_path 已存在，跳过"
+            return 0
+        fi
+        info "  下载 $rel_path..."
+        local full_url="${aosp_url}?format=TEXT"
         if command -v curl &>/dev/null; then
-            curl -sL "$aosp_url" | base64 -d > "$header_path"
+            curl -sL "$full_url" | base64 -d > "$dest" 2>/dev/null
         elif command -v wget &>/dev/null; then
-            wget -qO- "$aosp_url" | base64 -d > "$header_path"
+            wget -qO- "$full_url" | base64 -d > "$dest" 2>/dev/null
         else
-            # 用 Python 兜底
             python3 -c "
 import urllib.request, base64, sys
-url = '$aosp_url'
-path = '$header_path'
+url = '$full_url'
+dest = '$dest'
 try:
     resp = urllib.request.urlopen(url)
-    with open(path, 'wb') as f:
+    with open(dest, 'wb') as f:
         f.write(base64.b64decode(resp.read()))
-    print('  [OK] vk_android_native_buffer.h 已下载')
+    print('  [OK] $rel_path 已下载')
 except Exception as e:
     print(f'  [!!] 下载失败: {e}')
     sys.exit(1)
-"
+" || return 1
         fi
-        if [ -f "$header_path" ]; then
-            info "vk_android_native_buffer.h 已就绪"
+        if [ -f "$dest" ]; then
+            info "  $rel_path 已就绪"
+            return 0
         else
-            error "vk_android_native_buffer.h 下载失败!"
-            exit 1
+            error "  $rel_path 下载失败!"
+            return 1
         fi
-    else
-        info "vk_android_native_buffer.h 已存在，跳过下载"
-    fi
+    }
+
+    download_aosp_header "vulkan/vk_android_native_buffer.h" \
+        "https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/vulkan/include/vulkan/vk_android_native_buffer.h"
+    download_aosp_header "cutils/native_handle.h" \
+        "https://android.googlesource.com/platform/system/core/+/refs/heads/main/libcutils/include/cutils/native_handle.h"
 }
 
 # 构建 SwiftShader
