@@ -354,6 +354,54 @@ except Exception as e:
         fi
     }
     download_cutils_header
+
+    # 下载 Android 平台头文件（NDK 不包含 hardware/gralloc.h 等）
+    download_android_headers() {
+        info "下载 Android 平台头文件 (来自 AOSP)..."
+        local headers=(
+            "hardware/gralloc.h:https://android.googlesource.com/platform/hardware/libhardware/+/refs/heads/main/include/hardware/gralloc.h?format=TEXT"
+            "hardware/gralloc1.h:https://android.googlesource.com/platform/hardware/libhardware/+/refs/heads/main/include/hardware/gralloc1.h?format=TEXT"
+            "sync/sync.h:https://android.googlesource.com/platform/system/core/+/refs/heads/main/libsync/include/sync/sync.h?format=TEXT"
+        )
+        for entry in "${headers[@]}"; do
+            local relpath="${entry%%:*}"
+            local url="${entry#*:}"
+            local dest="$SWIFTSHADER_SRC/include/$relpath"
+            mkdir -p "$(dirname "$dest")"
+            if [ -f "$dest" ]; then
+                info "  $relpath 已存在，跳过"
+                continue
+            fi
+            info "  下载 $relpath..."
+            if command -v curl &>/dev/null; then
+                curl -sL "$url" | base64 -d > "$dest" 2>/dev/null
+            elif command -v wget &>/dev/null; then
+                wget -qO- "$url" | base64 -d > "$dest" 2>/dev/null
+            else
+                python3 -c "
+import urllib.request, base64, sys
+url = '$url'
+path = '$dest'
+try:
+    resp = urllib.request.urlopen(url)
+    with open(path, 'wb') as f:
+        f.write(base64.b64decode(resp.read()))
+    print('  [OK] $relpath 已下载')
+except Exception as e:
+    print(f'  [!!] 下载失败 $relpath: {e}')
+    sys.exit(1)
+" || return 1
+            fi
+            if [ -f "$dest" ]; then
+                info "  $relpath 已就绪"
+            else
+                error "  $relpath 下载失败!"
+                exit 1
+            fi
+        done
+        info "  所有 Android 平台头文件已就绪"
+    }
+    download_android_headers
 }
 
 # 构建 SwiftShader
