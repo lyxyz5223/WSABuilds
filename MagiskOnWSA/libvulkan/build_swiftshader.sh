@@ -207,13 +207,40 @@ extern "C" {
 #endif
 
 /* ---- VK_ANDROID_external_memory_android_hardware_buffer (补充定义) ---- */
-/* SwiftShader 的 vulkan_android.h 定义了此类型，但依赖 Vulkan 1.3    */
-/* NDK r27 API 30 不包含此类型，在此自行定义                           */
+/* SwiftShader 的 vulkan_android.h 定义了部分类型，但依赖 Vulkan 1.3    */
+/* NDK r27 API 30 不包含这些类型，在此自行定义                           */
 typedef struct VkAndroidHardwareBufferUsageANDROID {
     VkStructureType sType;
     void* pNext;
     uint64_t androidHardwareBufferUsage;
 } VkAndroidHardwareBufferUsageANDROID;
+
+typedef struct VkAndroidHardwareBufferPropertiesANDROID {
+    VkStructureType sType;
+    void* pNext;
+    VkDeviceSize allocationSize;
+    uint32_t memoryTypeBits;
+} VkAndroidHardwareBufferPropertiesANDROID;
+
+typedef struct VkAndroidHardwareBufferFormatPropertiesANDROID {
+    VkStructureType sType;
+    void* pNext;
+    VkFormat format;
+    uint64_t externalFormat;
+    VkFormatFeatureFlags formatFeatures;
+    VkComponentMapping samplerYcbcrConversionComponents;
+    VkSamplerYcbcrModelConversion suggestedYcbcrModel;
+    VkSamplerYcbcrRange suggestedYcbcrRange;
+    VkChromaLocation suggestedXChromaOffset;
+    VkChromaLocation suggestedYChromaOffset;
+} VkAndroidHardwareBufferFormatPropertiesANDROID;
+
+/* ---- VK_ANDROID_external_format_android 扩展 ---- */
+typedef struct VkExternalFormatANDROID {
+    VkStructureType sType;
+    void* pNext;
+    uint64_t externalFormat;
+} VkExternalFormatANDROID;
 
 /* ---- VK_ANDROID_native_buffer 扩展 ---- */
 #define VK_ANDROID_native_buffer 1
@@ -299,6 +326,22 @@ typedef VkResult (VKAPI_PTR *PFN_vkAcquireImageANDROID)(
     VkDevice, VkImage, int, VkSemaphore, VkFence);
 typedef VkResult (VKAPI_PTR *PFN_vkQueueSignalReleaseImageANDROID)(
     VkQueue, uint32_t, const VkSemaphore*, VkImage, int*);
+
+/* ---- VK_ANDROID_native_buffer 入口点函数声明 ---- */
+/* 这些函数由 SwiftShader 实现，通过 Vulkan 加载器动态链接 */
+/* VkGetProcAddress.cpp 通过 MAKE_VULKAN_DEVICE_ENTRY 宏引用 */
+VkResult vkGetSwapchainGrallocUsageANDROID(
+    VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage);
+VkResult vkGetSwapchainGrallocUsage2ANDROID(
+    VkDevice device, VkFormat format, VkImageUsageFlags imageUsage,
+    VkSwapchainImageUsageFlagsANDROID swapchainImageUsage,
+    uint64_t* grallocProducerUsage, uint64_t* grallocConsumerUsage);
+VkResult vkAcquireImageANDROID(
+    VkDevice device, VkImage image, int nativeFenceFd,
+    VkSemaphore semaphore, VkFence fence);
+VkResult vkQueueSignalReleaseImageANDROID(
+    VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores,
+    VkImage image, int* pNativeFenceFd);
 
 #ifdef __cplusplus
 }
@@ -533,6 +576,80 @@ STUBEOF
             info "  sync/sync.h 已存在，跳过"
         fi
 
+        # hardware/hardware.h（Android HAL 基础类型 —— hw_device_t, hw_module_t 等）
+        local hardware_path="$SWIFTSHADER_SRC/include/hardware/hardware.h"
+        mkdir -p "$(dirname "$hardware_path")"
+        if [ ! -f "$hardware_path" ]; then
+            cat > "$hardware_path" << 'STUBEOF'
+/*
+ * hardware/hardware.h —— 兼容性 stub
+ *
+ * Android HAL 基础类型定义。NDK r27 API 30 不包含此 AOSP 平台头文件。
+ */
+#ifndef ANDROID_HARDWARE_HARDWARE_H
+#define ANDROID_HARDWARE_HARDWARE_H
+
+#include <stdint.h>
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
+
+/* TAG 宏 */
+#define MAKE_TAG_CONSTANT(c0, c1, c2, c3) \
+    ((uint32_t)(c0) | ((uint32_t)(c1) << 8) | \
+     ((uint32_t)(c2) << 16) | ((uint32_t)(c3) << 24))
+
+#define HARDWARE_MODULE_TAG     MAKE_TAG_CONSTANT('H', 'W', 'M', 'T')
+#define HARDWARE_DEVICE_TAG     MAKE_TAG_CONSTANT('H', 'W', 'D', 'T')
+
+/* API 版本宏 */
+#define HARDWARE_MAKE_API_VERSION(maj, min) \
+    ((((uint32_t)(maj) & 0xFFFF) << 16) | ((uint32_t)(min) & 0xFFFF))
+#define HARDWARE_MODULE_API_VERSION(maj, min) HARDWARE_MAKE_API_VERSION(maj, min)
+#define HARDWARE_DEVICE_API_VERSION(maj, min) HARDWARE_MAKE_API_VERSION(maj, min)
+#define HARDWARE_HAL_API_VERSION 1
+
+/* 前向声明 */
+struct hw_module_t;
+struct hw_device_t;
+
+/* hw_module_methods_t */
+typedef struct hw_module_methods_t {
+    int (*open)(const struct hw_module_t* module, const char* id,
+                struct hw_device_t** device);
+} hw_module_methods_t;
+
+/* hw_device_t */
+typedef struct hw_device_t {
+    uint32_t tag;
+    uint32_t version;
+    struct hw_module_t* module;
+    uint32_t reserved[12];
+    int (*close)(struct hw_device_t* device);
+} hw_device_t;
+
+/* hw_module_t */
+typedef struct hw_module_t {
+    uint32_t tag;
+    uint16_t module_api_version;
+    uint16_t hal_api_version;
+    const char* id;
+    const char* name;
+    const char* author;
+    struct hw_module_methods_t* methods;
+    void* dso;
+    uint32_t reserved[32];
+} hw_module_t;
+
+__END_DECLS
+
+#endif /* ANDROID_HARDWARE_HARDWARE_H */
+STUBEOF
+            info "  hardware/hardware.h stub 已创建"
+        else
+            info "  hardware/hardware.h 已存在，跳过"
+        fi
+
         # hardware/hwvulkan.h
         local hwvulkan_path="$SWIFTSHADER_SRC/include/hardware/hwvulkan.h"
         mkdir -p "$(dirname "$hwvulkan_path")"
@@ -542,13 +659,6 @@ STUBEOF
  * hardware/hwvulkan.h —— 兼容性 stub
  *
  * 为 SwiftShader Android 交叉编译提供 Vulkan HAL 模块类型定义。
- * 来自 AOSP hardware/libhardware/include/hardware/hwvulkan.h。
- * NDK r27 API 30 不包含此头文件。
- */
-/*
- * hardware/hwvulkan.h —— 兼容性 stub（自包含，不依赖 hardware/hardware.h）
- *
- * 为 SwiftShader Android 交叉编译提供 Vulkan HAL 模块类型定义。
  * NDK r27 API 30 不包含此头文件。
  */
 #ifndef ANDROID_HARDWARE_HWVULKAN_H
@@ -556,18 +666,20 @@ STUBEOF
 
 #include <stdint.h>
 #include <sys/cdefs.h>
+#include <hardware/hardware.h>
 #include <vulkan/vulkan.h>
 
 __BEGIN_DECLS
 
-/* --- 兼容 hardware/hardware.h 的基础类型（NDK 不包含） --- */
-struct hw_module_t;
-struct hw_device_t;
-
-/* --- Vulkan 模块 ID --- */
+/* Vulkan 模块/设备 ID */
 #define HWVULKAN_HARDWARE_MODULE_ID "vulkan"
+#define HWVULKAN_DEVICE_0           "vk0"
 
-/* Vulkan 设备结构 —— 对应 AOSP hwvulkan_device_t */
+/* API 版本 */
+#define HWVULKAN_MODULE_API_VERSION_0_1 HARDWARE_MODULE_API_VERSION(0, 1)
+#define HWVULKAN_DEVICE_API_VERSION_0_1 HARDWARE_DEVICE_API_VERSION(0, 1)
+
+/* Vulkan 设备结构 */
 typedef struct hwvulkan_device_t {
     struct hw_device_t common;
     PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
@@ -606,6 +718,7 @@ STUBEOF
 
 #include <stdint.h>
 #include <sys/cdefs.h>
+#include <android/rect.h>
 #include <cutils/native_handle.h>
 
 __BEGIN_DECLS
@@ -688,6 +801,20 @@ enum AHardwareBuffer_Format {
     AHARDWAREBUFFER_FORMAT_S8_UINT                  = 0x35,
     AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420             = 0x102,
 };
+
+/* AHardwareBuffer 创建/管理函数（NDK API 26+） */
+#define AHARDWAREBUFFER_CREATE_FROM_HANDLE_METHOD_CLONE 1
+
+int AHardwareBuffer_allocate(const AHardwareBuffer_Desc* desc, AHardwareBuffer** outBuffer);
+void AHardwareBuffer_acquire(AHardwareBuffer* buffer);
+void AHardwareBuffer_release(AHardwareBuffer* buffer);
+int AHardwareBuffer_describe(const AHardwareBuffer* buffer, AHardwareBuffer_Desc* outDesc);
+int AHardwareBuffer_lock(AHardwareBuffer* buffer, uint64_t usage, int32_t fence,
+                         const ARect* rect, void** virtualAddress);
+int AHardwareBuffer_unlock(AHardwareBuffer* buffer, int32_t* fence);
+int AHardwareBuffer_createFromHandle(const AHardwareBuffer_Desc* desc,
+                                     const native_handle_t* handle, int32_t method,
+                                     AHardwareBuffer** outBuffer);
 
 __END_DECLS
 
