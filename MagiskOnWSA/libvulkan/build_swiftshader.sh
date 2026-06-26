@@ -112,6 +112,73 @@ clone_swiftshader() {
     fi
 }
 
+# 补丁 SwiftShader CMakeLists.txt - 添加 Android 平台支持
+patch_swiftshader() {
+    info "打补丁: 为 Android x86_64 添加 Vulkan 构建支持..."
+    
+    python3 -c "
+import sys
+src = sys.argv[1]
+
+# Patch 1: 根 CMakeLists.txt - vk_base 平台检查
+with open(src + '/CMakeLists.txt', 'r') as f:
+    content = f.read()
+
+old = '''elseif(FUCHSIA)
+    target_compile_definitions(vk_base INTERFACE \"VK_USE_PLATFORM_FUCHSIA\")
+else()
+    message(FATAL_ERROR \"Platform does not support Vulkan yet\")
+endif()'''
+
+new = '''elseif(FUCHSIA)
+    target_compile_definitions(vk_base INTERFACE \"VK_USE_PLATFORM_FUCHSIA\")
+elseif(ANDROID)
+    # Android uses Vulkan Loader ICD mechanism
+else()
+    message(FATAL_ERROR \"Platform does not support Vulkan yet\")
+endif()'''
+
+if old in content:
+    content = content.replace(old, new, 1)
+    with open(src + '/CMakeLists.txt', 'w') as f:
+        f.write(content)
+    print('  [OK] 根 CMakeLists.txt 已补丁')
+else:
+    print('  [!!] 根 CMakeLists.txt 未找到匹配模式，可能已被修改')
+    sys.exit(1)
+
+# Patch 2: src/Vulkan/CMakeLists.txt - VULKAN_API_LIBRARY_NAME
+with open(src + '/src/Vulkan/CMakeLists.txt', 'r') as f:
+    content = f.read()
+
+old = '''elseif(FUCHSIA)
+    set(VULKAN_API_LIBRARY_NAME \"libvulkan.so\")
+else()
+    message(FATAL_ERROR \"Platform does not support Vulkan yet\")
+endif()'''
+
+new = '''elseif(FUCHSIA)
+    set(VULKAN_API_LIBRARY_NAME \"libvulkan.so\")
+elseif(ANDROID)
+    # SwiftShader on Android is loaded as an ICD, not a drop-in library
+    set(VULKAN_API_LIBRARY_NAME \"\")
+else()
+    message(FATAL_ERROR \"Platform does not support Vulkan yet\")
+endif()'''
+
+if old in content:
+    content = content.replace(old, new, 1)
+    with open(src + '/src/Vulkan/CMakeLists.txt', 'w') as f:
+        f.write(content)
+    print('  [OK] src/Vulkan/CMakeLists.txt 已补丁')
+else:
+    print('  [!!] src/Vulkan/CMakeLists.txt 未找到匹配模式，可能已被修改')
+    sys.exit(1)
+
+print('补丁全部应用成功!')
+" "$SWIFTSHADER_SRC"
+}
+
 # 构建 SwiftShader
 build_swiftshader() {
     local build_dir="$WORK_DIR/build_android_x64"
@@ -156,6 +223,7 @@ main() {
     check_dependencies
     setup_ndk
     clone_swiftshader
+    patch_swiftshader
     build_swiftshader
     
     echo ""
