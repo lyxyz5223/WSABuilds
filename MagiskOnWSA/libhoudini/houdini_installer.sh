@@ -361,6 +361,21 @@ make_changes() {
                 print "    exec -- /system/bin/sh -c \"echo '"'"':arm64_exe:M::\\\\x7f\\\\x45\\\\x4c\\\\x46\\\\x02\\\\x01\\\\x01\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x02\\\\x00\\\\xb7::/system/bin/houdini64:P'"'"' >> /proc/sys/fs/binfmt_misc/register\""
                 print "    exec -- /system/bin/sh -c \"echo '"'"':arm64_dyn:M::\\\\x7f\\\\x45\\\\x4c\\\\x46\\\\x02\\\\x01\\\\x01\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x00\\\\x03\\\\x00\\\\xb7::/system/bin/houdini64:P'"'"' >> /proc/sys/fs/binfmt_misc/register\""
             }
+        }
+        END {
+            # ===== WSA GPU/GPU-PV 修复 =====
+            # 在 early-init 阶段设置系统属性，禁用损坏的 GPU-PV (virtgpu)，
+            # 限制 GLES 为 3.0，避免 Unity 等引擎因请求不存在的 GLES 3.1/3.2 而 ANR。
+            # 不设置 ro.config.vulkan.disable — SwiftShader 提供软件 Vulkan。
+            print ""
+            print "# WSA GPU/GPU-PV fix: disable broken virtgpu, use CPU SW render"
+            print "on early-init"
+            print "    setprop ro.boot.virtgpu_disable 1"
+            print "    setprop ro.config.virtgpu false"
+            print "    setprop vendor.gralloc.disable_virtgpu 1"
+            print "    setprop ro.opengles.version 196608"
+            print "    setprop ro.gfx.driver.0 \"\""
+            print "    setprop ro.gfx.driver.1 \"\""
         }' "$INIT_WINDOWS_RC" > "$TEMP_RC" || abort "Failed to process init.windows_x86_64.rc"
         
         # Replace the original file with the modified version
@@ -381,6 +396,64 @@ make_changes() {
     sudo find "$SYSTEM_MNT" -exec touch -hamt 200901010000.00 {} \; 2>/dev/null || echo "Warning: Failed to set timestamps for some system files"
 
     echo -e "Houdini files installation completed\n"
+
+    # ===== 安装 Vulkan 软件驱动 (SwiftShader) =====
+    # 安装纯 CPU 渲染的 Vulkan 实现，解决 GPU-PV 失效时 Unity 等引擎的崩溃问题
+    echo "=== Installing Vulkan SW driver (SwiftShader) ==="
+    local VULKAN_SCRIPT_DIR="$(realpath "$(dirname "$0")/libvulkan")"
+    local VULKAN_SO="$VULKAN_SCRIPT_DIR/output/libvk_swiftshader.so"
+    
+    if [ -f "$VULKAN_SO" ]; then
+        echo "Found SwiftShader at: $VULKAN_SO"
+        
+        # 创建 Vulkan ICD 目录结构
+        sudo mkdir -p "$VENDOR_MNT/lib64/vulkan"
+        sudo mkdir -p "$VENDOR_MNT/etc/vulkan/icd.d"
+        sudo mkdir -p "$VENDOR_MNT/lib64/vulkan/icd.d"
+        
+        # 复制 SwiftShader 库
+        sudo cp "$VULKAN_SO" "$VENDOR_MNT/lib64/vulkan/libvk_swiftshader.so"
+        sudo cp "$VULKAN_SO" "$VENDOR_MNT/lib64/libvk_swiftshader.so"
+        
+        # 复制 ICD 清单
+        if [ -f "$VULKAN_SCRIPT_DIR/vk_swiftshader_x86_64.json" ]; then
+            sudo cp "$VULKAN_SCRIPT_DIR/vk_swiftshader_x86_64.json" "$VENDOR_MNT/etc/vulkan/icd.d/vk_swiftshader.json"
+            sudo cp "$VULKAN_SCRIPT_DIR/vk_swiftshader_x86_64.json" "$VENDOR_MNT/lib64/vulkan/icd.d/vk_swiftshader.json"
+        else
+            echo '{
+    "file_format_version": "1.0.0",
+    "ICD": {
+        "library_path": "/vendor/lib64/libvk_swiftshader.so",
+        "api_version": "1.1"
+    }
+}' | sudo tee "$VENDOR_MNT/etc/vulkan/icd.d/vk_swiftshader.json" > /dev/null
+        fi
+        
+        # 设置权限
+        sudo chown root:root "$VENDOR_MNT/lib64/vulkan/libvk_swiftshader.so"
+        sudo chmod 644 "$VENDOR_MNT/lib64/vulkan/libvk_swiftshader.so"
+        sudo chown root:root "$VENDOR_MNT/lib64/libvk_swiftshader.so"
+        sudo chmod 644 "$VENDOR_MNT/lib64/libvk_swiftshader.so"
+        
+        # SELinux 上下文
+        if command -v setfattr &>/dev/null; then
+            sudo setfattr -n security.selinux -v "u:object_r:same_process_hal_file:s0" \
+                "$VENDOR_MNT/lib64/vulkan/libvk_swiftshader.so" 2>/dev/null || true
+            sudo setfattr -n security.selinux -v "u:object_r:same_process_hal_file:s0" \
+                "$VENDOR_MNT/lib64/libvk_swiftshader.so" 2>/dev/null || true
+            sudo find "$VENDOR_MNT/etc/vulkan" -type f -exec setfattr -n security.selinux \
+                -v "u:object_r:vendor_configs_file:s0" {} \; 2>/dev/null || true
+            sudo find "$VENDOR_MNT/lib64/vulkan/icd.d" -type f -exec setfattr -n security.selinux \
+                -v "u:object_r:vendor_configs_file:s0" {} \; 2>/dev/null || true
+        fi
+        
+        echo "SwiftShader Vulkan driver installed successfully!"
+    else
+        echo "Warning: SwiftShader not found at $VULKAN_SO"
+        echo "Vulkan SW driver will NOT be included in this build."
+        echo "To build SwiftShader, run: bash $VULKAN_SCRIPT_DIR/build_swiftshader.sh"
+    fi
+    echo ""
 }
 
 # Calculate target sizes
