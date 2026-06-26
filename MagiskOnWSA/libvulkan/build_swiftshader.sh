@@ -355,53 +355,187 @@ except Exception as e:
     }
     download_cutils_header
 
-    # 下载 Android 平台头文件（NDK 不包含 hardware/gralloc.h 等）
-    download_android_headers() {
-        info "下载 Android 平台头文件 (来自 AOSP)..."
-        local headers=(
-            "hardware/gralloc.h:https://android.googlesource.com/platform/hardware/libhardware/+/refs/heads/main/include/hardware/gralloc.h?format=TEXT"
-            "hardware/gralloc1.h:https://android.googlesource.com/platform/hardware/libhardware/+/refs/heads/main/include/hardware/gralloc1.h?format=TEXT"
-            "sync/sync.h:https://android.googlesource.com/platform/system/core/+/refs/heads/main/libsync/include/sync/sync.h?format=TEXT"
-        )
-        for entry in "${headers[@]}"; do
-            local relpath="${entry%%:*}"
-            local url="${entry#*:}"
-            local dest="$SWIFTSHADER_SRC/include/$relpath"
-            mkdir -p "$(dirname "$dest")"
-            if [ -f "$dest" ]; then
-                info "  $relpath 已存在，跳过"
-                continue
-            fi
-            info "  下载 $relpath..."
-            if command -v curl &>/dev/null; then
-                curl -sL "$url" | base64 -d > "$dest" 2>/dev/null
-            elif command -v wget &>/dev/null; then
-                wget -qO- "$url" | base64 -d > "$dest" 2>/dev/null
-            else
-                python3 -c "
-import urllib.request, base64, sys
-url = '$url'
-path = '$dest'
-try:
-    resp = urllib.request.urlopen(url)
-    with open(path, 'wb') as f:
-        f.write(base64.b64decode(resp.read()))
-    print('  [OK] $relpath 已下载')
-except Exception as e:
-    print(f'  [!!] 下载失败 $relpath: {e}')
-    sys.exit(1)
-" || return 1
-            fi
-            if [ -f "$dest" ]; then
-                info "  $relpath 已就绪"
-            else
-                error "  $relpath 下载失败!"
-                exit 1
-            fi
-        done
-        info "  所有 Android 平台头文件已就绪"
+    # 创建 Android 平台头文件 stub（NDK 不包含 hardware/gralloc.h 等）
+    # 注意：AOSP main 分支已将这些文件改为符号链接，googlesource 返回的是链接目标路径而非实际内容
+    # 因此改用自包含 stub，仅提供 libVulkan.cpp 实际需要的符号
+    create_android_header_stubs() {
+        info "创建 Android 平台头文件 stub..."
+
+        # hardware/gralloc.h
+        local gralloc_path="$SWIFTSHADER_SRC/include/hardware/gralloc.h"
+        mkdir -p "$(dirname "$gralloc_path")"
+        if [ ! -f "$gralloc_path" ]; then
+            cat > "$gralloc_path" << 'STUBEOF'
+/*
+ * hardware/gralloc.h —— 兼容性 stub
+ *
+ * 为 SwiftShader Android 交叉编译提供 GRALLOC_USAGE_* 常量定义。
+ * NDK r27 API 30 不包含此 AOSP 平台头文件。
+ */
+#ifndef ANDROID_HARDWARE_GRALLOC_H
+#define ANDROID_HARDWARE_GRALLOC_H
+
+#include <stdint.h>
+#include <cutils/native_handle.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* gralloc 使用标志 —— 来自 AOSP hardware/libhardware */
+#define GRALLOC_USAGE_SW_READ_NEVER   0x00000000U
+#define GRALLOC_USAGE_SW_READ_RARELY  0x00000002U
+#define GRALLOC_USAGE_SW_READ_OFTEN   0x00000003U
+#define GRALLOC_USAGE_SW_READ_MASK    0x0000000FU
+
+#define GRALLOC_USAGE_SW_WRITE_NEVER  0x00000000U
+#define GRALLOC_USAGE_SW_WRITE_RARELY 0x00000020U
+#define GRALLOC_USAGE_SW_WRITE_OFTEN  0x00000030U
+#define GRALLOC_USAGE_SW_WRITE_MASK   0x000000F0U
+
+#define GRALLOC_USAGE_HW_RENDER       0x00000002U
+#define GRALLOC_USAGE_HW_TEXTURE      0x00000100U
+#define GRALLOC_USAGE_HW_VIDEO_ENCODER 0x00010000U
+
+/* gralloc 模块 API 版本 */
+#define GRALLOC_MODULE_API_VERSION_0_2 0x00000002
+
+/* gralloc 错误码 */
+typedef enum {
+    GRALLOC_ERROR_BAD_HANDLE     = -3,
+    GRALLOC_ERROR_BAD_VALUE      = -2,
+    GRALLOC_ERROR_UNSUPPORTED    = -1,
+    GRALLOC_ERROR_NONE           = 0,
+} gralloc_error_t;
+
+/* gralloc 性能参数 */
+typedef enum {
+    GRALLOC1_PERFORMANCE_PARAM_NONE              = 0,
+    GRALLOC1_PERFORMANCE_PARAM_MAX               = 1,
+    GRALLOC1_PERFORMANCE_PARAM_MIN               = 2,
+    GRALLOC1_PERFORMANCE_PARAM_NUM_FRAMES        = 3,
+    GRALLOC1_PERFORMANCE_PARAM_NUM_DISPLAYS       = 4,
+    GRALLOC1_PERFORMANCE_PARAM_NUM_REFRESH_RATES  = 5,
+    GRALLOC1_PERFORMANCE_PARAM_REFRESH_RATE       = 6,
+    GRALLOC1_PERFORMANCE_PARAM_NUM_SWAP_INTERVALS = 7,
+    GRALLOC1_PERFORMANCE_PARAM_SWAP_INTERVAL      = 8,
+} gralloc1_performance_param_t;
+
+/* gralloc 缓存操作 */
+typedef enum {
+    GRALLOC1_FUNCTION_LOCK             = 0,
+    GRALLOC1_FUNCTION_UNLOCK           = 1,
+    GRALLOC1_FUNCTION_FLUSH            = 2,
+    GRALLOC1_FUNCTION_GET_COLOR_FEATURES = 3,
+    GRALLOC1_FUNCTION_GET_DIMENSIONS   = 4,
+    GRALLOC1_FUNCTION_GET_STRIDE       = 5,
+    GRALLOC1_FUNCTION_GET_LAYOUT       = 6,
+    GRALLOC1_FUNCTION_GET_HANDLE       = 7,
+    GRALLOC1_FUNCTION_SET_HANDLE       = 8,
+    GRALLOC1_FUNCTION_NUM_FUNCTIONS    = 9,
+} gralloc1_function_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ANDROID_HARDWARE_GRALLOC_H */
+STUBEOF
+            info "  hardware/gralloc.h stub 已创建"
+        else
+            info "  hardware/gralloc.h 已存在，跳过"
+        fi
+
+        # hardware/gralloc1.h
+        local gralloc1_path="$SWIFTSHADER_SRC/include/hardware/gralloc1.h"
+        mkdir -p "$(dirname "$gralloc1_path")"
+        if [ ! -f "$gralloc1_path" ]; then
+            cat > "$gralloc1_path" << 'STUBEOF'
+/*
+ * hardware/gralloc1.h —— 兼容性 stub
+ *
+ * 为 SwiftShader Android 交叉编译提供 GRALLOC1_* 常量定义。
+ * NDK r27 API 30 不包含此 AOSP 平台头文件。
+ */
+#ifndef ANDROID_HARDWARE_GRALLOC1_H
+#define ANDROID_HARDWARE_GRALLOC1_H
+
+#include <hardware/gralloc.h>
+#include <cutils/native_handle.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* gralloc1 生产者/消费者使用标志 */
+#define GRALLOC1_PRODUCER_USAGE_CPU_WRITE_OFTEN  0x00000002ULL
+#define GRALLOC1_CONSUMER_USAGE_CPU_READ_OFTEN   0x00000004ULL
+#define GRALLOC1_PRODUCER_USAGE_CPU_READ_OFTEN   0x00000001ULL
+#define GRALLOC1_PRODUCER_USAGE_GPU_RENDER_TARGET 0x00000001ULL
+
+/* gralloc1 描述符 */
+typedef struct gralloc1_device {
+    uint32_t tag;
+    uint32_t version;
+    int (*open)(const struct hw_module_t* module, const char* id,
+                struct hw_device_t** device);
+    int (*close)(struct hw_device_t* device);
+} gralloc1_device_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ANDROID_HARDWARE_GRALLOC1_H */
+STUBEOF
+            info "  hardware/gralloc1.h stub 已创建"
+        else
+            info "  hardware/gralloc1.h 已存在，跳过"
+        fi
+
+        # sync/sync.h
+        local sync_path="$SWIFTSHADER_SRC/include/sync/sync.h"
+        mkdir -p "$(dirname "$sync_path")"
+        if [ ! -f "$sync_path" ]; then
+            cat > "$sync_path" << 'STUBEOF'
+/*
+ * sync/sync.h —— 兼容性 stub
+ *
+ * 为 SwiftShader Android 交叉编译提供 sync_wait 声明。
+ * NDK r27 API 30 不包含此 AOSP 平台头文件。
+ */
+#ifndef ANDROID_SYNC_SYNC_H
+#define ANDROID_SYNC_SYNC_H
+
+#include <sys/types.h>
+#include <unistd.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+ * 等待同步 fence 文件描述符。
+ * @fd: 同步 fence 文件描述符
+ * @timeout: 超时时间（毫秒），-1 表示无限等待
+ * @return: 0 表示成功，-1 表示出错
+ */
+int sync_wait(int fd, int timeout);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ANDROID_SYNC_SYNC_H */
+STUBEOF
+            info "  sync/sync.h stub 已创建"
+        else
+            info "  sync/sync.h 已存在，跳过"
+        fi
+
+        info "  所有 Android 平台头文件 stub 已就绪"
     }
-    download_android_headers
+    create_android_header_stubs
 }
 
 # 构建 SwiftShader
