@@ -533,6 +533,171 @@ STUBEOF
             info "  sync/sync.h 已存在，跳过"
         fi
 
+        # hardware/hwvulkan.h
+        local hwvulkan_path="$SWIFTSHADER_SRC/include/hardware/hwvulkan.h"
+        mkdir -p "$(dirname "$hwvulkan_path")"
+        if [ ! -f "$hwvulkan_path" ]; then
+            cat > "$hwvulkan_path" << 'STUBEOF'
+/*
+ * hardware/hwvulkan.h —— 兼容性 stub
+ *
+ * 为 SwiftShader Android 交叉编译提供 Vulkan HAL 模块类型定义。
+ * 来自 AOSP hardware/libhardware/include/hardware/hwvulkan.h。
+ * NDK r27 API 30 不包含此头文件。
+ */
+/*
+ * hardware/hwvulkan.h —— 兼容性 stub（自包含，不依赖 hardware/hardware.h）
+ *
+ * 为 SwiftShader Android 交叉编译提供 Vulkan HAL 模块类型定义。
+ * NDK r27 API 30 不包含此头文件。
+ */
+#ifndef ANDROID_HARDWARE_HWVULKAN_H
+#define ANDROID_HARDWARE_HWVULKAN_H
+
+#include <stdint.h>
+#include <sys/cdefs.h>
+#include <vulkan/vulkan.h>
+
+__BEGIN_DECLS
+
+/* --- 兼容 hardware/hardware.h 的基础类型（NDK 不包含） --- */
+struct hw_module_t;
+struct hw_device_t;
+
+/* --- Vulkan 模块 ID --- */
+#define HWVULKAN_HARDWARE_MODULE_ID "vulkan"
+
+/* Vulkan 设备结构 —— 对应 AOSP hwvulkan_device_t */
+typedef struct hwvulkan_device_t {
+    struct hw_device_t common;
+    PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+    PFN_vkEnumerateInstanceExtensionProperties EnumerateInstanceExtensionProperties;
+    PFN_vkEnumerateInstanceLayerProperties EnumerateInstanceLayerProperties;
+    PFN_vkCreateInstance CreateInstance;
+} hwvulkan_device_t;
+
+/* Vulkan 模块结构 */
+typedef struct hwvulkan_module_t {
+    struct hw_module_t common;
+} hwvulkan_module_t;
+
+__END_DECLS
+
+#endif /* ANDROID_HARDWARE_HWVULKAN_H */
+STUBEOF
+            info "  hardware/hwvulkan.h stub 已创建"
+        else
+            info "  hardware/hwvulkan.h 已存在，跳过"
+        fi
+
+        # vndk/hardware_buffer.h
+        local hwb_path="$SWIFTSHADER_SRC/include/vndk/hardware_buffer.h"
+        mkdir -p "$(dirname "$hwb_path")"
+        if [ ! -f "$hwb_path" ]; then
+            cat > "$hwb_path" << 'STUBEOF'
+/*
+ * vndk/hardware_buffer.h —— 兼容性 stub（自包含）
+ *
+ * 为 SwiftShader Android 交叉编译提供 AHardwareBuffer 类型定义。
+ * NDK r27 API 30 不包含此头文件。
+ */
+#ifndef ANDROID_VNDK_HARDWARE_BUFFER_H
+#define ANDROID_VNDK_HARDWARE_BUFFER_H
+
+#include <stdint.h>
+#include <sys/cdefs.h>
+#include <cutils/native_handle.h>
+
+__BEGIN_DECLS
+
+/* AHardwareBuffer 描述符 */
+typedef struct AHardwareBuffer_Desc {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layers;
+    uint32_t format;
+    uint64_t usage;
+    uint32_t stride;
+    uint32_t rfu0;
+    uint64_t rfu1;
+} AHardwareBuffer_Desc;
+
+/* AHardwareBuffer 平面信息 */
+typedef struct AHardwareBuffer_Planes {
+    uint32_t planeCount;
+    struct AHardwareBuffer_Plane {
+        uint32_t offset;
+        uint32_t pixelStride;
+        uint32_t rowStride;
+        void* data;
+    } planes[4];
+} AHardwareBuffer_Planes;
+
+/* AHardwareBuffer 不透明类型 */
+typedef struct AHardwareBuffer AHardwareBuffer;
+
+/* AHardwareBuffer 使用标志 —— NDK android/native_window.h 已定义部分 */
+enum {
+    AHARDWAREBUFFER_USAGE_NONE                     = 0,
+    AHARDWAREBUFFER_USAGE_CPU_READ_NEVER           = 0UL,
+    AHARDWAREBUFFER_USAGE_CPU_READ_RARELY          = 2UL,
+    AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN           = 3UL,
+    AHARDWAREBUFFER_USAGE_CPU_READ_MASK            = 0x0FUL,
+    AHARDWAREBUFFER_USAGE_CPU_WRITE_NEVER          = 0UL,
+    AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY         = 0x20UL,
+    AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN          = 0x30UL,
+    AHARDWAREBUFFER_USAGE_CPU_WRITE_MASK           = 0xF0UL,
+    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE        = 0x100UL,
+    AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER          = 0x200UL,
+    AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER          = 0x400UL,
+    AHARDWAREBUFFER_USAGE_GPU_MIPMAP_COMPLETE      = 0x800UL,
+    AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP             = 0x1000UL,
+    AHARDWAREBUFFER_USAGE_GPU_PROTECTED_CONTENT    = 0x4000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_0                 = 0x10000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_1                 = 0x20000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_2                 = 0x40000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_3                 = 0x80000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_4                 = 0x100000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_5                 = 0x200000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_6                 = 0x400000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_7                 = 0x800000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_8                 = 0x1000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_9                 = 0x2000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_10                = 0x4000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_11                = 0x8000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_12                = 0x10000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_13                = 0x20000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_14                = 0x40000000UL,
+    AHARDWAREBUFFER_USAGE_VENDOR_15                = 0x80000000UL,
+};
+
+/* AHardwareBuffer 格式 */
+enum AHardwareBuffer_Format {
+    AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM           = 1,
+    AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM           = 2,
+    AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM             = 3,
+    AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM             = 4,
+    AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT        = 0x16,
+    AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM         = 0x2b,
+    AHARDWAREBUFFER_FORMAT_BLOB                     = 0x21,
+    AHARDWAREBUFFER_FORMAT_D16_UNORM                = 0x30,
+    AHARDWAREBUFFER_FORMAT_D24_UNORM                = 0x31,
+    AHARDWAREBUFFER_FORMAT_D24_UNORM_S8_UINT        = 0x32,
+    AHARDWAREBUFFER_FORMAT_D32_FLOAT                = 0x33,
+    AHARDWAREBUFFER_FORMAT_D32_FLOAT_S8_UINT        = 0x34,
+    AHARDWAREBUFFER_FORMAT_S8_UINT                  = 0x35,
+    AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420             = 0x102,
+};
+
+__END_DECLS
+
+#endif /* ANDROID_VNDK_HARDWARE_BUFFER_H */
+STUBEOF
+            info "  vndk/hardware_buffer.h stub 已创建"
+        else
+            info "  vndk/hardware_buffer.h 已存在，跳过"
+        fi
+
         info "  所有 Android 平台头文件 stub 已就绪"
     }
     create_android_header_stubs
