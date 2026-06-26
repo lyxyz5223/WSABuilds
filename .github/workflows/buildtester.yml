@@ -120,6 +120,26 @@ jobs:
           ./scripts/build.sh --arch ${{ inputs.arch }} --release-type ${opts[RELEASE_TYPE,${{ inputs.release_type }}]} --magisk-ver $MAGISK_VER --gapps-brand ${opts[GAPPS_BRAND,${{ inputs.gapps_brand }}]} --custom-model ${opts[CUSTOM_MODEL,${{ inputs.custom_model }}]} --root-sol $ROOT_SOL --compress-format ${opts[COMPRESSION,${{ inputs.compression }}]} ${opts[REMOVE_AMAZON,${{ inputs.remove_amazon }}]} --after-compress
         shell: bash
 
+      - name: Install Ubuntu Dependencies for Vulkan & Houdini 🔨
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build python3 git
+        shell: bash
+
+      - name: Build SwiftShader Vulkan SW Driver 🔨
+        working-directory: MagiskOnWSA
+        run: |
+          chmod +x ./libvulkan/build_swiftshader.sh
+          ./libvulkan/build_swiftshader.sh
+        shell: bash
+
+      - name: Install Houdini and Process Images 🔧
+        working-directory: MagiskOnWSA
+        run: |
+          chmod +x ./libhoudini/houdini_installer.sh
+          ./libhoudini/houdini_installer.sh "${{ steps.wsa.outputs.artifact_folder }}"
+        shell: bash
+
 
       - name: Set date
         id: date
