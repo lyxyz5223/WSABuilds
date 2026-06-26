@@ -198,7 +198,7 @@ build_swiftshader() {
         -DSWIFTSHADER_WARNINGS_AS_ERRORS=FALSE
     
     info "开始编译 libvk_swiftshader.so..."
-    ninja libvk_swiftshader
+    ninja libvk_swiftshader.so
     if [ $? -ne 0 ]; then
         error "SwiftShader 编译失败"
         exit 1
