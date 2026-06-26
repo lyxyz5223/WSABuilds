@@ -133,7 +133,7 @@ endif()'''
 new = '''elseif(FUCHSIA)
     target_compile_definitions(vk_base INTERFACE \"VK_USE_PLATFORM_FUCHSIA\")
 elseif(ANDROID)
-    # Android uses Vulkan Loader ICD mechanism
+    target_compile_definitions(vk_base INTERFACE \"VK_USE_PLATFORM_ANDROID_KHR\")
 else()
     message(FATAL_ERROR \"Platform does not support Vulkan yet\")
 endif()'''
@@ -147,7 +147,7 @@ else:
     print('  [!!] 根 CMakeLists.txt 未找到匹配模式，可能已被修改')
     sys.exit(1)
 
-# Patch 2: src/Vulkan/CMakeLists.txt - VULKAN_API_LIBRARY_NAME
+# Patch 2: src/Vulkan/CMakeLists.txt - VULKAN_API_LIBRARY_NAME + Android defs
 with open(src + '/src/Vulkan/CMakeLists.txt', 'r') as f:
     content = f.read()
 
@@ -161,6 +161,9 @@ new = '''elseif(FUCHSIA)
     set(VULKAN_API_LIBRARY_NAME \"libvulkan.so\")
 elseif(ANDROID)
     # SwiftShader on Android is loaded as an ICD, not a drop-in library
+    target_compile_definitions(vk_swiftshader PRIVATE
+        \"VK_USE_PLATFORM_ANDROID_KHR\"
+        \"SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER\")
     set(VULKAN_API_LIBRARY_NAME \"\")
 else()
     message(FATAL_ERROR \"Platform does not support Vulkan yet\")
@@ -206,41 +209,12 @@ print('补丁全部应用成功!')
 extern "C" {
 #endif
 
-/* ---- VK_ANDROID_external_memory_android_hardware_buffer (补充定义) ---- */
-/* SwiftShader 的 vulkan_android.h 定义了部分类型，但依赖 Vulkan 1.3    */
-/* NDK r27 API 30 不包含这些类型，在此自行定义                           */
-typedef struct VkAndroidHardwareBufferUsageANDROID {
-    VkStructureType sType;
-    void* pNext;
-    uint64_t androidHardwareBufferUsage;
-} VkAndroidHardwareBufferUsageANDROID;
-
-typedef struct VkAndroidHardwareBufferPropertiesANDROID {
-    VkStructureType sType;
-    void* pNext;
-    VkDeviceSize allocationSize;
-    uint32_t memoryTypeBits;
-} VkAndroidHardwareBufferPropertiesANDROID;
-
-typedef struct VkAndroidHardwareBufferFormatPropertiesANDROID {
-    VkStructureType sType;
-    void* pNext;
-    VkFormat format;
-    uint64_t externalFormat;
-    VkFormatFeatureFlags formatFeatures;
-    VkComponentMapping samplerYcbcrConversionComponents;
-    VkSamplerYcbcrModelConversion suggestedYcbcrModel;
-    VkSamplerYcbcrRange suggestedYcbcrRange;
-    VkChromaLocation suggestedXChromaOffset;
-    VkChromaLocation suggestedYChromaOffset;
-} VkAndroidHardwareBufferFormatPropertiesANDROID;
-
-/* ---- VK_ANDROID_external_format_android 扩展 ---- */
-typedef struct VkExternalFormatANDROID {
-    VkStructureType sType;
-    void* pNext;
-    uint64_t externalFormat;
-} VkExternalFormatANDROID;
+/* 注意：VK_ANDROID_external_memory_android_hardware_buffer 扩展类型
+ * (VkAndroidHardwareBufferUsageANDROID, VkAndroidHardwareBufferPropertiesANDROID,
+ *  VkAndroidHardwareBufferFormatPropertiesANDROID, VkExternalFormatANDROID)
+ * 由 SwiftShader 自带的 include/vulkan/vulkan_android.h 提供
+ * （通过 VK_USE_PLATFORM_ANDROID_KHR 激活）。此处不再重复定义。
+ */
 
 /* ---- VK_ANDROID_native_buffer 扩展 ---- */
 #define VK_ANDROID_native_buffer 1
@@ -811,6 +785,9 @@ void AHardwareBuffer_release(AHardwareBuffer* buffer);
 int AHardwareBuffer_describe(const AHardwareBuffer* buffer, AHardwareBuffer_Desc* outDesc);
 int AHardwareBuffer_lock(AHardwareBuffer* buffer, uint64_t usage, int32_t fence,
                          const ARect* rect, void** virtualAddress);
+int AHardwareBuffer_lockPlanes(AHardwareBuffer* buffer, uint64_t usage,
+                               int32_t fence, const ARect* rect,
+                               AHardwareBuffer_Planes* planes);
 int AHardwareBuffer_unlock(AHardwareBuffer* buffer, int32_t* fence);
 int AHardwareBuffer_createFromHandle(const AHardwareBuffer_Desc* desc,
                                      const native_handle_t* handle, int32_t method,
