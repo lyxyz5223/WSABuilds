@@ -178,50 +178,182 @@ else:
 print('补丁全部应用成功!')
 " "$SWIFTSHADER_SRC"
 
-    # 下载缺失的 Android 平台头文件（AOSP，NDK 不包含）
-    download_aosp_header() {
-        local rel_path="$1"   # 例如 vulkan/vk_android_native_buffer.h
-        local aosp_url="$2"   # AOSP Gitiles URL (不含 ?format=TEXT)
-        local dest="$SWIFTSHADER_SRC/include/$rel_path"
+    # 创建 vk_android_native_buffer.h 兼容 stub
+    # 不直接从 AOSP main 下载，因为 AOSP 版本依赖 NDK 未定义的类型
+    # 改用 SwiftShader 自带的 vulkan_android.h 提供 VkAndroidHardwareBufferUsageANDROID
+    local nb_path="$SWIFTSHADER_SRC/include/vulkan/vk_android_native_buffer.h"
+    if [ ! -f "$nb_path" ]; then
+        info "创建 vk_android_native_buffer.h 兼容 stub..."
+        mkdir -p "$SWIFTSHADER_SRC/include/vulkan"
+        cat > "$nb_path" << 'STUBEOF'
+/*
+ * vk_android_native_buffer.h 兼容性 stub
+ *
+ * 为 SwiftShader 在 Android x86_64 交叉编译环境中
+ * 提供 VK_ANDROID_native_buffer 扩展类型定义。
+ *
+ * 包含 NDK 的 <vulkan/vulkan.h> 获取基础 Vulkan 类型，
+ * 并补充 NDK API 30 未包含的 Android 扩展类型。
+ */
+
+#ifndef __VK_ANDROID_NATIVE_BUFFER_H__
+#define __VK_ANDROID_NATIVE_BUFFER_H__
+
+#include <cutils/native_handle.h>
+#include <vulkan/vulkan.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ---- VK_ANDROID_external_memory_android_hardware_buffer (补充定义) ---- */
+/* SwiftShader 的 vulkan_android.h 定义了此类型，但依赖 Vulkan 1.3    */
+/* NDK r27 API 30 不包含此类型，在此自行定义                           */
+typedef struct VkAndroidHardwareBufferUsageANDROID {
+    VkStructureType sType;
+    void* pNext;
+    uint64_t androidHardwareBufferUsage;
+} VkAndroidHardwareBufferUsageANDROID;
+
+/* ---- VK_ANDROID_native_buffer 扩展 ---- */
+#define VK_ANDROID_native_buffer 1
+#define VK_ANDROID_NATIVE_BUFFER_EXTENSION_NUMBER 11
+#define VK_ANDROID_NATIVE_BUFFER_SPEC_VERSION 11
+#define VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME "VK_ANDROID_native_buffer"
+
+#define VK_ANDROID_NATIVE_BUFFER_ENUM(type, id) \
+    ((type)(1000000000 + \
+    (1000 * (VK_ANDROID_NATIVE_BUFFER_EXTENSION_NUMBER - 1)) + (id)))
+
+#define VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID \
+    VK_ANDROID_NATIVE_BUFFER_ENUM(VkStructureType, 0)
+#define VK_STRUCTURE_TYPE_SWAPCHAIN_IMAGE_CREATE_INFO_ANDROID \
+    VK_ANDROID_NATIVE_BUFFER_ENUM(VkStructureType, 1)
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENTATION_PROPERTIES_ANDROID \
+    VK_ANDROID_NATIVE_BUFFER_ENUM(VkStructureType, 2)
+#define VK_STRUCTURE_TYPE_GRALLOC_USAGE_INFO_ANDROID \
+    VK_ANDROID_NATIVE_BUFFER_ENUM(VkStructureType, 3)
+#define VK_STRUCTURE_TYPE_GRALLOC_USAGE_INFO_2_ANDROID \
+    VK_ANDROID_NATIVE_BUFFER_ENUM(VkStructureType, 4)
+
+typedef enum VkSwapchainImageUsageFlagBitsANDROID {
+    VK_SWAPCHAIN_IMAGE_USAGE_SHARED_BIT_ANDROID = 0x00000001,
+    VK_SWAPCHAIN_IMAGE_USAGE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+} VkSwapchainImageUsageFlagBitsANDROID;
+typedef VkFlags VkSwapchainImageUsageFlagsANDROID;
+
+typedef struct {
+    uint64_t consumer;
+    uint64_t producer;
+} VkNativeBufferUsage2ANDROID;
+
+typedef struct {
+    VkStructureType sType;
+    const void* pNext;
+    buffer_handle_t handle;
+    int stride;
+    int format;
+    int usage;
+    VkNativeBufferUsage2ANDROID usage2;
+    uint64_t usage3;
+    struct AHardwareBuffer* ahb;
+} VkNativeBufferANDROID;
+
+typedef struct {
+    VkStructureType sType;
+    const void* pNext;
+    VkSwapchainImageUsageFlagsANDROID usage;
+} VkSwapchainImageCreateInfoANDROID;
+
+typedef struct {
+    VkStructureType sType;
+    const void* pNext;
+    VkBool32 sharedImage;
+} VkPhysicalDevicePresentationPropertiesANDROID;
+
+typedef struct {
+    VkStructureType sType;
+    const void* pNext;
+    VkFormat format;
+    VkImageUsageFlags imageUsage;
+} VkGrallocUsageInfoANDROID;
+
+typedef struct {
+    VkStructureType sType;
+    const void* pNext;
+    VkFormat format;
+    VkImageUsageFlags imageUsage;
+    VkSwapchainImageUsageFlagsANDROID swapchainImageUsage;
+} VkGrallocUsageInfo2ANDROID;
+
+typedef VkResult (VKAPI_PTR *PFN_vkGetSwapchainGrallocUsageANDROID)(
+    VkDevice, VkFormat, VkImageUsageFlags, int*);
+typedef VkResult (VKAPI_PTR *PFN_vkGetSwapchainGrallocUsage2ANDROID)(
+    VkDevice, VkFormat, VkImageUsageFlags,
+    VkSwapchainImageUsageFlagsANDROID, uint64_t*, uint64_t*);
+typedef VkResult (VKAPI_PTR *PFN_vkGetSwapchainGrallocUsage3ANDROID)(
+    VkDevice, const VkGrallocUsageInfoANDROID*, uint64_t*);
+typedef VkResult (VKAPI_PTR *PFN_vkGetSwapchainGrallocUsage4ANDROID)(
+    VkDevice, const VkGrallocUsageInfo2ANDROID*, uint64_t*);
+typedef VkResult (VKAPI_PTR *PFN_vkAcquireImageANDROID)(
+    VkDevice, VkImage, int, VkSemaphore, VkFence);
+typedef VkResult (VKAPI_PTR *PFN_vkQueueSignalReleaseImageANDROID)(
+    VkQueue, uint32_t, const VkSemaphore*, VkImage, int*);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __VK_ANDROID_NATIVE_BUFFER_H__ */
+STUBEOF
+        if [ -f "$nb_path" ]; then
+            info "vk_android_native_buffer.h stub 已创建"
+        else
+            error "vk_android_native_buffer.h stub 创建失败!"
+            exit 1
+        fi
+    else
+        info "vk_android_native_buffer.h 已存在，跳过创建"
+    fi
+
+    # 下载 cutils/native_handle.h（AOSP system/core，NDK 不包含）
+    download_cutils_header() {
+        local dest="$SWIFTSHADER_SRC/include/cutils/native_handle.h"
         mkdir -p "$(dirname "$dest")"
         if [ -f "$dest" ]; then
-            info "  $rel_path 已存在，跳过"
+            info "  cutils/native_handle.h 已存在，跳过"
             return 0
         fi
-        info "  下载 $rel_path..."
-        local full_url="${aosp_url}?format=TEXT"
+        info "  下载 cutils/native_handle.h (来自 AOSP)..."
+        local aosp_url="https://android.googlesource.com/platform/system/core/+/refs/heads/main/libcutils/include/cutils/native_handle.h?format=TEXT"
         if command -v curl &>/dev/null; then
-            curl -sL "$full_url" | base64 -d > "$dest" 2>/dev/null
+            curl -sL "$aosp_url" | base64 -d > "$dest" 2>/dev/null
         elif command -v wget &>/dev/null; then
-            wget -qO- "$full_url" | base64 -d > "$dest" 2>/dev/null
+            wget -qO- "$aosp_url" | base64 -d > "$dest" 2>/dev/null
         else
             python3 -c "
 import urllib.request, base64, sys
-url = '$full_url'
-dest = '$dest'
+url = '$aosp_url'
+path = '$dest'
 try:
     resp = urllib.request.urlopen(url)
-    with open(dest, 'wb') as f:
+    with open(path, 'wb') as f:
         f.write(base64.b64decode(resp.read()))
-    print('  [OK] $rel_path 已下载')
+    print('  [OK] cutils/native_handle.h 已下载')
 except Exception as e:
     print(f'  [!!] 下载失败: {e}')
     sys.exit(1)
 " || return 1
         fi
         if [ -f "$dest" ]; then
-            info "  $rel_path 已就绪"
+            info "  cutils/native_handle.h 已就绪"
             return 0
         else
-            error "  $rel_path 下载失败!"
-            return 1
+            error "  cutils/native_handle.h 下载失败!"
+            exit 1
         fi
     }
-
-    download_aosp_header "vulkan/vk_android_native_buffer.h" \
-        "https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/vulkan/include/vulkan/vk_android_native_buffer.h"
-    download_aosp_header "cutils/native_handle.h" \
-        "https://android.googlesource.com/platform/system/core/+/refs/heads/main/libcutils/include/cutils/native_handle.h"
+    download_cutils_header
 }
 
 # 构建 SwiftShader
