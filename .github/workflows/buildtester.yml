@@ -154,7 +154,7 @@ jobs:
 
       - name: Set date
         id: date
-        run: echo "DATE=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+        run: echo "date=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
         shell: bash
   
       - name: Pass to Windows 💸
@@ -183,7 +183,7 @@ jobs:
           path: output
           key: ${{ needs.build.outputs.artifact }}-${{ needs.build.outputs.date }}
           enableCrossOsArchive: true
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Merge language and density resources 🧙🏻‍♂️
         run: |
