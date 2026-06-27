@@ -167,8 +167,8 @@ elseif(ANDROID)
     target_link_libraries(vk_swiftshader PRIVATE log nativewindow)
     # VkDeviceMemoryExternalAndroid.cpp is not in CMake source list (only Android.bp)
     target_sources(vk_swiftshader PRIVATE
-        \"${CMAKE_CURRENT_SOURCE_DIR}/VkDeviceMemoryExternalAndroid.cpp\"
-        \"${CMAKE_CURRENT_SOURCE_DIR}/VkAndroidStubs.cpp\")
+        \"\${CMAKE_CURRENT_SOURCE_DIR}/VkDeviceMemoryExternalAndroid.cpp\"
+        \"\${CMAKE_CURRENT_SOURCE_DIR}/VkAndroidStubs.cpp\")
     set(VULKAN_API_LIBRARY_NAME \"\")
 else()
     message(FATAL_ERROR \"Platform does not support Vulkan yet\")
