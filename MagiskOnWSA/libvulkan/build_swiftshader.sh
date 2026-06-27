@@ -197,7 +197,7 @@ with open(src + '/src/Vulkan/VkAndroidStubs.cpp', 'w') as f:
 #include <cutils/native_handle.h>
 #include <vndk/hardware_buffer.h>
 
-extern "C" {
+extern \"C\" {
 
 // sync_wait 用于 libVulkan.cpp 的 vkAcquireImageANDROID
 // 在纯 CPU 渲染中不需要实际的 fence 等待
@@ -218,7 +218,7 @@ int AHardwareBuffer_createFromHandle(
     return -ENOSYS;  // 软件渲染不支持此操作
 }
 
-}  // extern "C"
+}  // extern \"C\"
 ''')
 print('  [OK] VkAndroidStubs.cpp 已创建')
 
@@ -780,10 +780,12 @@ enum {
     AHARDWAREBUFFER_USAGE_CPU_WRITE_MASK           = 0xF0UL,
     AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE        = 0x100UL,
     AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER          = 0x200UL,
+    AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT          = 0x200UL, /* GPU_FRAMEBUFFER 别名 */
     AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER          = 0x400UL,
     AHARDWAREBUFFER_USAGE_GPU_MIPMAP_COMPLETE      = 0x800UL,
     AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP             = 0x1000UL,
     AHARDWAREBUFFER_USAGE_GPU_PROTECTED_CONTENT    = 0x4000UL,
+    AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT         = 0x4000UL, /* GPU_PROTECTED_CONTENT 别名 */
     AHARDWAREBUFFER_USAGE_VENDOR_0                 = 0x10000UL,
     AHARDWAREBUFFER_USAGE_VENDOR_1                 = 0x20000UL,
     AHARDWAREBUFFER_USAGE_VENDOR_2                 = 0x40000UL,
@@ -818,6 +820,13 @@ enum AHardwareBuffer_Format {
     AHARDWAREBUFFER_FORMAT_D32_FLOAT_S8_UINT        = 0x34,
     AHARDWAREBUFFER_FORMAT_S8_UINT                  = 0x35,
     AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420             = 0x102,
+    /* API 29+ */
+    AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM           = 5,
+    AHARDWAREBUFFER_FORMAT_R8_UNORM                  = 0x105,
+    AHARDWAREBUFFER_FORMAT_YV12                      = 0x103,
+    /* API 30+ */
+    AHARDWAREBUFFER_FORMAT_YCbCr_P010                = 0x107,
+    AHARDWAREBUFFER_FORMAT_YCbCr_P210                = 0x108,
 };
 
 /* AHardwareBuffer 创建/管理函数（NDK API 26+） */
