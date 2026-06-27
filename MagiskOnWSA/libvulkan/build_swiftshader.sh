@@ -164,7 +164,11 @@ elseif(ANDROID)
     target_compile_definitions(vk_swiftshader PRIVATE
         \"VK_USE_PLATFORM_ANDROID_KHR\"
         \"SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER\")
-    target_link_libraries(vk_swiftshader PRIVATE log sync nativewindow)
+    target_link_libraries(vk_swiftshader PRIVATE log nativewindow)
+    # VkDeviceMemoryExternalAndroid.cpp is not in CMake source list (only Android.bp)
+    target_sources(vk_swiftshader PRIVATE
+        \"${CMAKE_CURRENT_SOURCE_DIR}/VkDeviceMemoryExternalAndroid.cpp\"
+        \"${CMAKE_CURRENT_SOURCE_DIR}/VkAndroidStubs.cpp\")
     set(VULKAN_API_LIBRARY_NAME \"\")
 else()
     message(FATAL_ERROR \"Platform does not support Vulkan yet\")
@@ -178,6 +182,45 @@ if old in content:
 else:
     print('  [!!] src/Vulkan/CMakeLists.txt 未找到匹配模式，可能已被修改')
     sys.exit(1)
+
+# Create Android platform stub for missing NDK symbols (sync_wait, AHardwareBuffer_createFromHandle)
+with open(src + '/src/Vulkan/VkAndroidStubs.cpp', 'w') as f:
+    f.write('''/*
+ * VkAndroidStubs.cpp - NDK 缺失符号的兼容性实现
+ *
+ * sync_wait: NDK 的 libsync.so 不适用于链接（仅运行时可用）
+ * AHardwareBuffer_createFromHandle: NDK r27 libnativewindow 未导出此符号
+ */
+
+#include <errno.h>
+#include <unistd.h>
+#include <cutils/native_handle.h>
+#include <vndk/hardware_buffer.h>
+
+extern "C" {
+
+// sync_wait 用于 libVulkan.cpp 的 vkAcquireImageANDROID
+// 在纯 CPU 渲染中不需要实际的 fence 等待
+int sync_wait(int fd, int timeout) {
+    if(fd >= 0) {
+        close(fd);
+    }
+    return 0;  // 始终成功
+}
+
+// AHardwareBuffer_createFromHandle 在 NDK r27 的 libnativewindow 中未导出
+// 在纯 CPU 软件渲染中不应被调用；如果被调用则返回错误
+int AHardwareBuffer_createFromHandle(
+    const struct AHardwareBuffer_Desc* desc,
+    const native_handle_t* handle, int method,
+    struct AHardwareBuffer** outBuffer) {
+    (void)desc; (void)handle; (void)method; (void)outBuffer;
+    return -ENOSYS;  // 软件渲染不支持此操作
+}
+
+}  // extern "C"
+''')
+print('  [OK] VkAndroidStubs.cpp 已创建')
 
 print('补丁全部应用成功!')
 " "$SWIFTSHADER_SRC"
