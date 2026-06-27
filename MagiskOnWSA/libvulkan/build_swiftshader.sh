@@ -164,6 +164,7 @@ elseif(ANDROID)
     target_compile_definitions(vk_swiftshader PRIVATE
         \"VK_USE_PLATFORM_ANDROID_KHR\"
         \"SWIFTSHADER_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER\")
+    target_link_libraries(vk_swiftshader PRIVATE log sync nativewindow)
     set(VULKAN_API_LIBRARY_NAME \"\")
 else()
     message(FATAL_ERROR \"Platform does not support Vulkan yet\")
